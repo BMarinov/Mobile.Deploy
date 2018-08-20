@@ -10,7 +10,8 @@ teamId=${7}
 appName=${8}
 displayName=${9}
 bundleId=${10}
-appStoreRelease=${11:-false}
+versionName=${11}
+appStoreRelease=${12:-false}
 
 echo " (i) packagePath: $packagePath"
 echo " (i) envName: $envName"
@@ -22,17 +23,8 @@ echo " (i) teamId: $teamId"
 echo " (i) appName: $appName"
 echo " (i) displayName: $displayName"
 echo " (i) bundleId: $bundleId"
+echo " (i) versionName: $versionName"
 echo " (i) appStoreRelease: $appStoreRelease"
-
-#for local testing
-#SYSTEM_DEFAULTWORKINGDIRECTORY="~/Documents"
-
-echo " (i) Default directory: $SYSTEM_DEFAULTWORKINGDIRECTORY"
-echo " (i) PWD: $PWD"
-
-tempKeyChainFile="_xamariniostasktmp.keychain"
-tempKeyChainPath="$SYSTEM_DEFAULTWORKINGDIRECTORY/packaging/$tempKeyChainFile"
-tempKeyChainPassword="_xamariniostask_TmpKeychain_Pwd#1"
 
 # Teardown trap runs regardless of exit code
 function teardown {
@@ -40,11 +32,21 @@ function teardown {
     echo "note: this runs whether the script fails or not."
     /usr/bin/security delete-keychain $tempKeyChainPath || true
     rm -rf $SCRATCH || true
-    cd $SYSTEM_DEFAULTWORKINGDIRECTORY || true
+    popd|| true
 }
 trap teardown EXIT
 
+function initialize {
+    echo " (i) Creating scratch directory"
+    SCRATCH=$(mktemp -d)
+    echo " (i) Scratch directory located at '$SCRATCH'"
+}
+
 function setupTemporaryKeychain {
+    tempKeyChainFile="_xamariniostasktmp.keychain"
+    tempKeyChainPath="$SCRATCH/packaging/$tempKeyChainFile"
+    tempKeyChainPassword="_xamariniostask_TmpKeychain_Pwd#1"
+
     echo " (i) create-keychain $tempKeyChainPath"
     /usr/bin/security create-keychain -p $tempKeyChainPassword $tempKeyChainPath
     echo " (i) set-keychain-settings $tempKeyChainPath"
@@ -58,30 +60,39 @@ function setupTemporaryKeychain {
     /usr/bin/security cms -D -i $provisioningProfilePath
 }
 
-function initialize {
-    echo " (i) Creating scratch directory"
-    SCRATCH=$(mktemp -d)
-    echo " (i) Scratch directory located at '$SCRATCH'"
-}
-
 function unzipPackage {
     echo " (i) Unziping the package for updating"
     unzip -q "$packagePath" -d $SCRATCH
 }
 
 function applyConfiguration {
-    envConfig="app.$envName.config"
-    echo " (i) envConfig: $envConfig"
-    keepFile="$envConfig.keep"
+    if [ ! -z "$envName" ] ; then
+        envConfig="app.$envName.config"
+        echo " (i) envConfig: $envConfig"
+        keepFile="$envConfig.keep"
 
-    echo " (i) Rename $envConfig to $keepFile"
-    mv "$SCRATCH/Payload/$appName.app/Assets/$envConfig" "$SCRATCH/Payload/$appName.app/Assets/$keepFile"
+        echo " (i) Rename $envConfig to $keepFile"
+        mv "$SCRATCH/Payload/$appName.app/Assets/$envConfig" "$SCRATCH/Payload/$appName.app/Assets/$keepFile"
 
-    echo " (i) Remove .config files"
-    rm $SCRATCH/Payload/$appName.app/Assets/*.config
+        echo " (i) Remove .config files"
+        rm $SCRATCH/Payload/$appName.app/Assets/*.config
 
-    echo " (i) Rename .keep to  app.config"
-    mv "$SCRATCH/Payload/$appName.app/Assets/$keepFile" "$SCRATCH/Payload/$appName.app/Assets/app.config"
+        echo " (i) Rename .keep to  app.config"
+        mv "$SCRATCH/Payload/$appName.app/Assets/$keepFile" "$SCRATCH/Payload/$appName.app/Assets/app.config"
+    fi
+}
+
+function setVersion {
+    if [ ! -z "$versionName" ] ; then
+        echo " (i) Print current Bundle Version"
+        /usr/libexec/PlistBuddy -c "Print CFBundleVersion" $SCRATCH/Payload/$appName.app/Info.plist
+
+        echo " (i) Update Bundle Version"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${versionName}" $SCRATCH/Payload/$appName.app/Info.plist
+
+        echo " (i) Print updated Bundle Version"
+        /usr/libexec/PlistBuddy -c "Print CFBundleVersion" $SCRATCH/Payload/$appName.app/Info.plist
+    fi
 }
 
 function updateDisplayName {
@@ -136,6 +147,22 @@ function signVerifyZip {
     echo " (i) Packaging the new application TO $SCRATCH/Payload/$appName.ipa"
     zip -qry $appName.ipa Payload
 }
+
+initialize
+
+setupTemporaryKeychain
+
+unzipPackage
+
+applyConfiguration
+
+setVersion
+
+updateDisplayName
+
+preparePackage
+
+signVerifyZip
 
 echo " (i) Move .ipa back to $packagePath"
 mv $SCRATCH/$appName.ipa $packagePath
