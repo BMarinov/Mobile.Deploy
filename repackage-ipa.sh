@@ -10,8 +10,9 @@ teamId=${7}
 appName=${8}
 displayName=${9}
 bundleId=${10}
-versionName=${11}
-appStoreRelease=${12:-false}
+bundleVersion=${11}
+bundleShortVersion=${12}
+appStoreRelease=${13:-false}
 
 echo " (i) packagePath: $packagePath"
 echo " (i) envName: $envName"
@@ -23,7 +24,8 @@ echo " (i) teamId: $teamId"
 echo " (i) appName: $appName"
 echo " (i) displayName: $displayName"
 echo " (i) bundleId: $bundleId"
-echo " (i) versionName: $versionName"
+echo " (i) bundleVersion: $bundleVersion"
+echo " (i) bundleShortVersion: $bundleShortVersion"
 echo " (i) appStoreRelease: $appStoreRelease"
 
 # Teardown trap runs regardless of exit code
@@ -77,21 +79,32 @@ function applyConfiguration {
         echo " (i) Remove .config files"
         rm $SCRATCH/Payload/$appName.app/Assets/*.config
 
-        echo " (i) Rename .keep to  app.config"
+        echo " (i) Rename .keep to app.config"
         mv "$SCRATCH/Payload/$appName.app/Assets/$keepFile" "$SCRATCH/Payload/$appName.app/Assets/app.config"
     fi
 }
 
 function setVersion {
-    if [ ! -z "$versionName" ] ; then
-        echo " (i) Print current Bundle Version"
+    if [ ! -z "$bundleVersion" ] ; then
+        echo " (i) Print current bundle version"
         /usr/libexec/PlistBuddy -c "Print CFBundleVersion" $SCRATCH/Payload/$appName.app/Info.plist
 
-        echo " (i) Update Bundle Version"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${versionName}" $SCRATCH/Payload/$appName.app/Info.plist
+        echo " (i) Update bundle version"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${bundleVersion}" $SCRATCH/Payload/$appName.app/Info.plist
 
-        echo " (i) Print updated Bundle Version"
+        echo " (i) Print updated bundle version"
         /usr/libexec/PlistBuddy -c "Print CFBundleVersion" $SCRATCH/Payload/$appName.app/Info.plist
+    fi
+
+    if [ ! -z "$bundleShortVersion" ] ; then
+        echo " (i) Print current short bundle version"
+        /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" $SCRATCH/Payload/$appName.app/Info.plist
+
+        echo " (i) Update bundle version"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${bundleShortVersion}" $SCRATCH/Payload/$appName.app/Info.plist
+
+        echo " (i) Print updated bundle version"
+        /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" $SCRATCH/Payload/$appName.app/Info.plist
     fi
 }
 
@@ -100,16 +113,16 @@ function updateDisplayName {
     plutil -replace CFBundleIdentifier -string $bundleId $SCRATCH/Payload/$appName.app/Info.plist
 
     echo " (i) Update App Name to ${displayName}"
-    plutil -replace CFBundleDisplayName -string $envName $SCRATCH/Payload/$appName.app/Info.plist
+    plutil -replace CFBundleDisplayName -string $displayName $SCRATCH/Payload/$appName.app/Info.plist
 
     find $SCRATCH/Payload/$appName.app/ -name '*.strings'| while read filename; do
-    echo " (i) Matching File: $filename"
-    plutil -replace CFBundleDisplayName -string $displayName $filename
+        echo " (i) Matching File: $filename"
+        plutil -replace CFBundleDisplayName -string $displayName $filename
     done
 }
 
 function preparePackage {
-    cd $SCRATCH
+    pushd $SCRATCH
 
     echo " (i) Replacing the provisioning profile in Payload/$appName.app/embedded.mobileprovision with $provisioningProfilePath" 
     cp -f $provisioningProfilePath $SCRATCH/Payload/$appName.app/embedded.mobileprovision
@@ -139,7 +152,7 @@ function preparePackage {
 
 function signVerifyZip {
     echo " (i) Re-Signing application"
-    /usr/bin/codesign -f -s $certName --entitlements entitlements.plist $SCRATCH/Payload/$appName.app --verbose
+    /usr/bin/codesign -f -s "${certName}" --entitlements entitlements.plist $SCRATCH/Payload/$appName.app --verbose
 
     echo " (i) Verifying app"
     /usr/bin/codesign -vv $SCRATCH/Payload/$appName.app
