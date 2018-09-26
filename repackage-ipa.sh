@@ -62,7 +62,7 @@ function setupTemporaryKeychain {
     /usr/bin/security cms -D -i $provisioningProfilePath
 }
 
-function unzipPackage {
+function extractPackage {
     echo " (i) Unziping the package for updating"
     unzip -q "$packagePath" -d $SCRATCH
 }
@@ -77,7 +77,7 @@ function applyConfiguration {
         mv "$SCRATCH/Payload/$appName.app/Assets/$envConfig" "$SCRATCH/Payload/$appName.app/Assets/$keepFile"
 
         echo " (i) Remove .config files"
-        rm $SCRATCH/Payload/$appName.app/Assets/*.config
+        rm "$SCRATCH/Payload/$appName.app/Assets/*.config"
 
         echo " (i) Rename .keep to app.config"
         mv "$SCRATCH/Payload/$appName.app/Assets/$keepFile" "$SCRATCH/Payload/$appName.app/Assets/app.config"
@@ -122,8 +122,6 @@ function updateDisplayName {
 }
 
 function preparePackage {
-    pushd $SCRATCH
-
     echo " (i) Replacing the provisioning profile in Payload/$appName.app/embedded.mobileprovision with $provisioningProfilePath" 
     cp -f $provisioningProfilePath $SCRATCH/Payload/$appName.app/embedded.mobileprovision
 
@@ -165,7 +163,7 @@ initialize
 
 setupTemporaryKeychain
 
-unzipPackage
+extractPackage
 
 applyConfiguration
 
@@ -177,5 +175,5 @@ preparePackage
 
 signVerifyZip
 
-echo " (i) Move .ipa back to $packagePath"
+echo " (i) Move package back to $packagePath"
 mv $SCRATCH/$appName.ipa $packagePath
